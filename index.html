@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>午练成绩 · 适时公布与汇总排名</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #f5f7fb; padding: 20px; color: #1e293b; }
+  .app { max-width: 1400px; margin: 0 auto; background: #fff; border-radius: 24px; box-shadow: 0 20px 35px -8px rgba(0,0,0,0.15); overflow: hidden; }
+  .tabs { display: flex; background: #eef2f6; padding: 8px 20px 0 20px; gap: 8px; border-bottom: 2px solid #d0dae8; }
+  .tab { padding: 12px 28px; background: transparent; border: none; font-size: 1rem; font-weight: 600; color: #64748b; border-radius: 16px 16px 0 0; cursor: pointer; }
+  .tab.active { background: #fff; color: #0f3b7a; box-shadow: 0 -2px 8px rgba(0,0,0,0.04); border-bottom: 2px solid #fff; margin-bottom: -2px; }
+  .panel { padding: 28px 24px 32px; }
+  .panel:not(.active) { display: none; }
+  h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 20px; color: #0b2a4a; }
+  .import-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-end; margin-bottom: 30px; background: #f8fafd; padding: 20px 24px; border-radius: 20px; border: 1px solid #dce5f0; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-weight: 600; font-size: 0.85rem; color: #59748f; }
+  select, input[type="file"] { background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; padding: 10px 16px; font-size: 1rem; min-width: 220px; cursor: pointer; }
+  button { background: #1e4f8a; color: #fff; border: none; border-radius: 30px; padding: 12px 28px; font-weight: 600; font-size: 1rem; cursor: pointer; box-shadow: 0 6px 12px -4px rgba(30,79,138,0.3); }
+  button:hover { background: #0f3b6b; }
+  button:active { transform: scale(0.97); }
+  .btn-del { background: #fee2e2; color: #b91c1c; border: none; border-radius: 50%; width: 22px; height: 22px; line-height: 1; font-size: 0.9rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; box-shadow: none; font-weight: 700; }
+  .btn-del:hover { background: #fca5a5; }
+  .student-grid { display: flex; flex-wrap: wrap; gap: 14px; margin: 20px 0 30px; padding: 6px 4px; }
+  .student-card { background: #fff; border-radius: 20px; padding: 14px 18px; box-shadow: 0 6px 14px -6px rgba(0,30,60,0.12); border: 2px solid #d9e5f2; min-width: 170px; position: relative; }
+  .student-card.bottom10 { background: linear-gradient(145deg, #fef9c3, #fde68a); border-color: #eab308; }
+  .student-card.rank1 { border: 3px solid #f59e0b; box-shadow: 0 0 20px rgba(245,158,11,0.5); background: linear-gradient(145deg, #fef3c7, #fde68a); }
+  .student-card.rank2 { border: 3px solid #94a3b8; box-shadow: 0 0 16px rgba(148,163,184,0.5); background: linear-gradient(145deg, #f1f5f9, #e2e8f0); }
+  .student-card.rank3 { border: 3px solid #d97706; box-shadow: 0 0 16px rgba(217,119,6,0.4); background: linear-gradient(145deg, #fed7aa, #fdba74); }
+  .medal { position: absolute; top: -10px; right: -6px; font-size: 1.8rem; }
+  .student-card .name-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .student-card .student-id { font-size: 0.75rem; color: #6b7f96; background: #e7edf6; padding: 2px 8px; border-radius: 30px; }
+  .student-card .student-name { font-weight: 700; font-size: 1.1rem; color: #0a2b4e; }
+  .total-score { font-size: 2rem; font-weight: 800; color: #dc2626; line-height: 1.2; }
+  .sub-scores { display: flex; gap: 16px; margin-top: 6px; font-size: 0.85rem; background: rgba(233,240,249,0.8); padding: 5px 12px; border-radius: 30px; }
+  .sub-scores span { font-weight: 600; color: #0f3b6b; }
+  .table-wrapper { overflow-x: auto; border-radius: 18px; border: 1px solid #dfe8f2; background: #fff; margin: 18px 0 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 500px; }
+  th { background: #eaf1fa; color: #163a5f; font-weight: 600; padding: 12px 10px; border-bottom: 2px solid #cbdae9; text-align: center; white-space: nowrap; }
+  td { padding: 10px 8px; border-bottom: 1px solid #e3eaf3; text-align: center; }
+  tr:hover td { background: #f6faff; }
+  .sortable { cursor: pointer; user-select: none; }
+  .sortable:hover { background: #d9e6f5; }
+  .sortable::after { content: "⇅"; font-size: 0.8rem; margin-left: 6px; opacity: 0.5; }
+  .rank-badge { background: #1e4f8a; color: #fff; border-radius: 30px; padding: 2px 10px; font-weight: 600; font-size: 0.8rem; display: inline-block; }
+  .below-avg-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .below-avg-item { background: #fff1f0; border-radius: 30px; padding: 5px 16px; color: #b91c1c; border: 1px solid #fecaca; font-size: 0.9rem; }
+  .stats-banner { background: #d9e9ff; padding: 12px 18px; border-radius: 16px; margin-bottom: 10px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 20px; }
+  .stats-banner .avg-score { font-size: 1.4rem; font-weight: 800; color: #0b3b6b; }
+  .empty-hint { color: #6b7f96; padding: 30px 20px; text-align: center; background: #f9fcff; border-radius: 20px; border: 1px dashed #b9cde0; }
+  .subject-tag { font-size: 0.7rem; background: #cbdff5; padding: 2px 8px; border-radius: 30px; color: #0b2a4a; font-weight: 600; }
+  .message { margin-top: 6px; font-weight: 500; color: #0f3b7a; }
+  .subject-group { margin-bottom: 18px; }
+  .subject-group h4 { font-size: 0.95rem; color: #0f3b7a; margin-bottom: 8px; font-weight: 700; }
+  .record-item { background: #fff; border-radius: 40px; padding: 6px 8px 6px 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); border: 2px solid #c7ddf5; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 8px; margin: 0 8px 8px 0; cursor: pointer; transition: all 0.15s; position: relative; }
+  .record-item:hover { border-color: #3b82f6; box-shadow: 0 4px 12px rgba(59,130,246,0.25); }
+  .record-item.selected { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-color: #2563eb; box-shadow: 0 4px 14px rgba(37,99,235,0.35); }
+  .record-item.selected::before { content: "✔"; position: absolute; top: -8px; left: -8px; background: #2563eb; color: #fff; font-size: 0.7rem; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; font-weight: 700; }
+  .two-col { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .col-objective { flex: 0 0 calc(40% - 10px); min-width: 280px; }
+  .col-subjective { flex: 1; min-width: 320px; }
+  .two-col h4 { font-size: 1rem; color: #0b2a4a; margin-bottom: 8px; padding: 6px 12px; background: #eef4fb; border-radius: 8px; display: inline-block; }
+  .table-obj { font-size: 1.15rem; }
+  .table-obj th { padding: 16px 12px; font-size: 1.15rem; }
+  .table-obj td { padding: 16px 12px; font-size: 1.25rem; }
+  .table-obj td strong { color: #b91c1c; font-size: 1.35rem; }
+  .table-subj { font-size: 1.15rem; }
+  .table-subj th { padding: 16px 12px; font-size: 1.15rem; }
+  .table-subj td { padding: 16px 12px; font-size: 1.25rem; }
+  .table-subj td:nth-child(2) { font-size: 0.9rem; }
+  .table-subj td:nth-child(2) strong { font-size: 0.95rem; color: #1e293b; font-weight: 600; }
+  .podium { display: flex; justify-content: center; align-items: flex-end; gap: 10px; margin: 12px 0 8px; flex-wrap: wrap; }
+  .podium-item { text-align: center; padding: 10px 14px; border-radius: 14px; min-width: 130px; box-shadow: 0 8px 16px -6px rgba(0,0,0,0.18); position: relative; }
+  .podium-item .crown { font-size: 1.3rem; margin-bottom: 2px; }
+  .podium-item .p-title { font-size: 0.8rem; font-weight: 700; margin-bottom: 2px; }
+  .podium-item .p-name { font-size: 1rem; font-weight: 800; color: #0a2b4e; }
+  .podium-item .p-id { font-size: 0.7rem; color: #4b6589; }
+  .podium-item .p-score { font-size: 1.4rem; font-weight: 800; color: #dc2626; margin-top: 4px; }
+  .podium-1 { background: linear-gradient(145deg, #fef3c7, #fbbf24); transform: scale(1.08); z-index: 2; }
+  .podium-2 { background: linear-gradient(145deg, #f1f5f9, #cbd5e1); }
+  .podium-3 { background: linear-gradient(145deg, #fed7aa, #fb923c); }
+  .tier-section { margin: 22px 0; }
+  .tier-title { font-size: 1.2rem; font-weight: 700; margin: 10px 0 14px; padding: 10px 22px; border-radius: 30px; display: inline-block; color: #fff; letter-spacing: 0.5px; box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
+  .tier-diamond { background: linear-gradient(90deg, #0ea5e9, #3b82f6); }
+  .tier-platinum { background: linear-gradient(90deg, #10b981, #059669); }
+  .tier-gold { background: linear-gradient(90deg, #f59e0b, #d97706); }
+  .tier-silver { background: linear-gradient(90deg, #94a3b8, #64748b); }
+  .tier-bronze { background: linear-gradient(90deg, #b45309, #92400e); }
+  .tier-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
+  .tier-card { background: #fff; border: 2px solid #c7ddf5; border-radius: 16px; padding: 16px 22px; font-size: 1.05rem; box-shadow: 0 4px 10px rgba(0,0,0,0.06); line-height: 1.6; }
+  .tier-card .t-name { font-weight: 800; color: #0a2b4e; font-size: 1.2rem; }
+  .tier-card .t-id { color: #64748b; font-size: 0.9rem; }
+  .tier-card .t-score { color: #dc2626; font-weight: 800; font-size: 1.25rem; }
+  .loading-mask { position: fixed; inset: 0; background: rgba(255,255,255,0.75); display: none; align-items: center; justify-content: center; z-index: 9999; font-size: 1.2rem; color: #0f3b7a; font-weight: 600; }
+  .loading-mask.show { display: flex; }
+</style>
+</head>
+<body>
+<div class="loading-mask" id="loadingMask">⏳ 正在与云端同步...</div>
+
+<div class="app">
+  <div class="tabs">
+    <button class="tab active" data-tab="import">📥 导入</button>
+    <button class="tab" data-tab="display">📊 展示</button>
+    <button class="tab" data-tab="ranking">🏆 汇总排名</button>
+  </div>
+
+  <div class="panel active" id="panel-import">
+    <h2>📂 导入成绩单</h2>
+    <div class="import-row">
+      <div class="field">
+        <label>录入科目</label>
+        <select id="subjectSelect">
+          <option value="语文">语文</option>
+          <option value="数学">数学</option>
+          <option value="英语">英语</option>
+          <option value="物理">物理</option>
+          <option value="化学">化学</option>
+          <option value="生物">生物</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>选择 Excel 文件</label>
+        <input type="file" id="excelFileInput" accept=".xlsx, .xls">
+      </div>
+      <button id="importBtn">📥 导入并解析</button>
+    </div>
+    <div id="importMessage" class="message"></div>
+    <div style="margin-top: 24px; background: #f0f6ff; border-radius: 18px; padding: 20px; border: 1px solid #c7ddf5;">
+      <p style="color: #1e4f8a; font-weight: 600; margin-bottom: 8px;">📋 已导入的记录（按科目分组 · 已云端同步）</p>
+      <p style="color:#59748f; font-size:0.85rem; margin-bottom: 12px;">💡 点击任意记录，即可在「展示」标签页查看该次成绩；所有记录保存在云端，换电脑打开同一网址即可看到</p>
+      <div id="importedList"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-display">
+    <h2>📌 本次成绩展示</h2>
+    <div id="displayContent"><div class="empty-hint">暂无数据，请先导入一份成绩单。</div></div>
+  </div>
+
+  <div class="panel" id="panel-ranking">
+    <h2>🏅 全科目汇总排名</h2>
+    <div id="rankingContent"><div class="empty-hint">暂无导入数据，请先导入至少一份成绩单。</div></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Supabase 配置
+   ============================================================ */
+const SUPABASE_URL = 'https://zkdzjicmatjfowjede.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_F5bzPftN_2NpDyKvXy6I6Q_yMbkmh1k';
+/* ============================================================ */
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ==================== 全局状态 ==================== */
+let importedRecords = [];
+let latestRecord = null;
+let selectedRecordId = null;
+let rankingSortKey = 'totalSum';
+let rankingSortAsc = false;
+
+const tabs = document.querySelectorAll('.tab');
+const panels = {
+  import: document.getElementById('panel-import'),
+  display: document.getElementById('panel-display'),
+  ranking: document.getElementById('panel-ranking')
+};
+const subjectSelect = document.getElementById('subjectSelect');
+const excelFileInput = document.getElementById('excelFileInput');
+const importBtn = document.getElementById('importBtn');
+const importMessage = document.getElementById('importMessage');
+const importedList = document.getElementById('importedList');
+const displayContent = document.getElementById('displayContent');
+const rankingContent = document.getElementById('rankingContent');
+const loadingMask = document.getElementById('loadingMask');
+
+function showLoading() { loadingMask.classList.add('show'); }
+function hideLoading() { loadingMask.classList.remove('show'); }
+
+/* ==================== 标签页切换 ==================== */
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.tab;
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    Object.keys(panels).forEach(k => panels[k].classList.toggle('active', k === target));
+    if (target === 'display') renderDisplay();
+    if (target === 'ranking') renderRanking();
+  });
+});
+
+/* ==================== 工具函数 ==================== */
+function findSheet(workbook, keyword) {
+  if (workbook.Sheets[keyword]) return workbook.Sheets[keyword];
+  const target = keyword.replace(/\s/g, '');
+  for (const name of workbook.SheetNames) {
+    if (name.replace(/\s/g, '').includes(target)) return workbook.Sheets[name];
+  }
+  return null;
+}
+
+function sheetToArray(sheet) {
+  if (!sheet || !sheet['!ref']) return [];
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const rows = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const row = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r: r, c: c });
+      const cell = sheet[addr];
+      let v = '';
+      if (cell) {
+        if (cell.w !== undefined && cell.w !== null) v = cell.w;
+        else if (cell.v !== undefined && cell.v !== null) v = cell.v;
+      }
+      row.push(String(v).trim());
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+/* ==================== 解析「原始成绩」 ==================== */
+function parseRawSheet(rows) {
+  const result = { examTitle: '', students: [] };
+  if (!rows || rows.length === 0) return result;
+  result.examTitle = String(rows[0]?.[0] ?? '').trim() || '未命名考试';
+  for (let i = 2; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) continue;
+    const id   = String(row[0] ?? '').trim();
+    const name = String(row[1] ?? '').trim();
+    if (!id || !/^\d+$/.test(id)) continue;
+    if (!name) continue;
+    const total      = parseFloat(row[3]) || 0;
+    const objective  = parseFloat(row[4]) || 0;
+    const subjective = parseFloat(row[5]) || 0;
+    result.students.push({ id, name, total, objective, subjective });
+  }
+  return result;
+}
+
+/* ==================== 解析「选项分布」 ==================== */
+function parseOptionSheet(rows) {
+  const objective = [];
+  const subjective = [];
+  if (!rows || rows.length === 0) return { objective, subjective };
+
+  const OBJ_PATTERN = /^[A-Da-d]+$/;
+
+  for (let i = 2; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) continue;
+    const qNo = String(row[0] ?? '').trim();
+    if (!qNo || !/^\d+$/.test(qNo)) continue;
+
+    const answer = String(row[1] ?? '').trim();
+    const item = {
+      qNoText: qNo,
+      qNo: parseInt(qNo, 10),
+      answer,
+      wrongCount:   parseFloat(row[2]) || 0,
+      correctCount: parseFloat(row[3]) || 0,
+      correctRate:  parseFloat(row[4]) || 0
+    };
+
+    if (OBJ_PATTERN.test(answer)) objective.push(item);
+    else subjective.push(item);
+  }
+  return { objective, subjective };
+}
+
+/* ==================== 从 Supabase 加载所有记录 ==================== */
+async function loadAllRecordsFromSupabase() {
+  showLoading();
+  try {
+    const { data, error } = await supabaseClient
+      .from('scores')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('加载失败:', error);
+      importMessage.textContent = '❌ 从云端加载数据失败：' + error.message;
+      return;
+    }
+
+    importedRecords = data.map(row => ({
+      id: row.id,
+      subject: row.subject,
+      examTitle: row.exam_title,
+      students: row.students,
+      objective: row.objective,
+      subjective: row.subjective,
+      timestamp: row.created_at
+    }));
+
+    const stillExists = importedRecords.find(r => r.id === selectedRecordId);
+    if (!stillExists) {
+      latestRecord = importedRecords.length > 0 ? importedRecords[importedRecords.length - 1] : null;
+      selectedRecordId = latestRecord ? latestRecord.id : null;
+    } else {
+      latestRecord = stillExists;
+    }
+
+    renderImportedList();
+    if (panels.display.classList.contains('active')) renderDisplay();
+    if (panels.ranking.classList.contains('active')) renderRanking();
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ==================== 导入按钮 ==================== */
+importBtn.addEventListener('click', async () => {
+  const file = excelFileInput.files[0];
+  if (!file) { importMessage.textContent = '⚠️ 请先选择一个 Excel 文件。'; return; }
+  const subject = subjectSelect.value;
+  importMessage.textContent = '⏳ 正在解析...';
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const rawSheet = findSheet(workbook, '原始成绩');
+      const optSheet = findSheet(workbook, '选项分布');
+      if (!rawSheet) throw new Error('未找到名为「原始成绩」的 sheet');
+      if (!optSheet) throw new Error('未找到名为「选项分布」的 sheet');
+
+      const rawRows = sheetToArray(rawSheet);
+      const optRows = sheetToArray(optSheet);
+
+      const { examTitle, students } = parseRawSheet(rawRows);
+      const { objective, subjective } = parseOptionSheet(optRows);
+
+      const record = {
+        id: 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        subject,
+        examTitle,
+        students,
+        objective,
+        subjective,
+        timestamp: new Date().toISOString()
+      };
+
+      importMessage.textContent = '⏳ 正在上传到云端...';
+      showLoading();
+
+      const { error: insertError } = await supabaseClient
+        .from('scores')
+        .insert({
+          id: record.id,
+          subject: record.subject,
+          exam_title: record.examTitle,
+          students: record.students,
+          objective: record.objective,
+          subjective: record.subjective
+        });
+
+      if (insertError) {
+        importMessage.textContent = '❌ 保存到云端失败：' + insertError.message;
+        hideLoading();
+        return;
+      }
+
+      importedRecords.push(record);
+      latestRecord = record;
+      selectedRecordId = record.id;
+
+      importMessage.textContent = `✅ 已导入并同步到云端：${examTitle} · ${subject} · 学生 ${students.length} 人 · 客观题 ${objective.length} 道 · 主观题 ${subjective.length} 道`;
+      excelFileInput.value = '';
+
+      renderImportedList();
+      if (panels.display.classList.contains('active')) renderDisplay();
+      if (panels.ranking.classList.contains('active')) renderRanking();
+      hideLoading();
+    } catch (err) {
+      console.error(err);
+      importMessage.textContent = '❌ 解析失败：' + (err.message || err);
+      hideLoading();
+    }
+  };
+  reader.onerror = () => { importMessage.textContent = '❌ 文件读取失败。'; };
+  reader.readAsArrayBuffer(file);
+});
+
+/* ==================== 已导入记录 ==================== */
+function renderImportedList() {
+  if (importedRecords.length === 0) {
+    importedList.innerHTML = '<span style="color:#6b7f96;">暂无记录</span>';
+    return;
+  }
+  const subjects = ['语文','数学','英语','物理','化学','生物'];
+  let html = '';
+  subjects.forEach(sub => {
+    const recs = importedRecords.filter(r => r.subject === sub);
+    if (recs.length === 0) return;
+    html += `<div class="subject-group">
+      <h4>📘 ${sub}（${recs.length} 条）</h4>
+      <div>`;
+    recs.forEach(rec => {
+      const sel = (rec.id === selectedRecordId) ? ' selected' : '';
+      html += `<span class="record-item${sel}" data-id="${rec.id}">
+        <span><span class="subject-tag">${rec.subject}</span> ${rec.examTitle} · ${rec.students.length}人</span>
+        <button class="btn-del" data-id="${rec.id}" title="删除这条记录">×</button>
+      </span>`;
+    });
+    html += `</div></div>`;
+  });
+  importedList.innerHTML = html;
+
+  importedList.querySelectorAll('.record-item').forEach(item => {
+    item.addEventListener('click', (ev) => {
+      if (ev.target.classList.contains('btn-del')) return;
+      selectRecord(item.dataset.id);
+    });
+  });
+
+  importedList.querySelectorAll('.btn-del').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      deleteRecord(btn.dataset.id);
+    });
+  });
+}
+
+function selectRecord(id) {
+  const rec = importedRecords.find(r => r.id === id);
+  if (!rec) return;
+  selectedRecordId = id;
+  latestRecord = rec;
+  renderImportedList();
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === 'display'));
+  Object.keys(panels).forEach(k => panels[k].classList.toggle('active', k === 'display'));
+  renderDisplay();
+}
+
+async function deleteRecord(id) {
+  const idx = importedRecords.findIndex(r => r.id === id);
+  if (idx < 0) return;
+  const removed = importedRecords[idx];
+  if (!confirm(`确定删除这条记录吗？\n${removed.subject} · ${removed.examTitle}\n删除后该次成绩不再参与汇总，云端也会同步删除。`)) return;
+
+  showLoading();
+  const { error: deleteError } = await supabaseClient
+    .from('scores')
+    .delete()
+    .eq('id', id);
+
+  if (deleteError) {
+    alert('删除云端记录失败：' + deleteError.message);
+    hideLoading();
+    return;
+  }
+
+  importedRecords.splice(idx, 1);
+  if (selectedRecordId === id) {
+    if (importedRecords.length > 0) {
+      latestRecord = importedRecords[importedRecords.length - 1];
+      selectedRecordId = latestRecord.id;
+    } else {
+      latestRecord = null;
+      selectedRecordId = null;
+    }
+  }
+
+  renderImportedList();
+  if (panels.display.classList.contains('active')) renderDisplay();
+  if (panels.ranking.classList.contains('active')) renderRanking();
+  hideLoading();
+}
+
+/* ==================== 展示页 ==================== */
+function renderDisplay() {
+  if (!latestRecord) {
+    displayContent.innerHTML = '<div class="empty-hint">暂无数据，请先导入一份成绩单。</div>';
+    return;
+  }
+  const rec = latestRecord;
+  const students = rec.students;
+  const objective = rec.objective || [];
+  const subjective = rec.subjective || [];
+
+  const sorted = [...students].sort((a,b) => b.total - a.total);
+  const rankMap = new Map();
+  sorted.forEach((s, i) => rankMap.set(s.id, i + 1));
+  const total = students.length;
+
+  const totalScores = students.map(s => s.total);
+  const avgScore = totalScores.length ? totalScores.reduce((a,b) => a+b, 0) / totalScores.length : 0;
+  const belowAvgStudents = students.filter(s => s.total < avgScore);
+
+  let html = '';
+  html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <span style="font-weight:600; color:#0b2a4a;">📋 ${rec.examTitle} · ${rec.subject}</span>
+      <span style="color:#4b6589;">共 ${total} 人</span>
+    </div>`;
+
+  html += '<div class="student-grid">';
+  students.forEach(s => {
+    const rank = rankMap.get(s.id);
+    let cls = 'student-card';
+    if (rank === 1) cls += ' rank1';
+    else if (rank === 2) cls += ' rank2';
+    else if (rank === 3) cls += ' rank3';
+    else if (rank > total - 10) cls += ' bottom10';
+
+    let medal = '';
+    if (rank === 1) medal = '<span class="medal">🥇</span>';
+    else if (rank === 2) medal = '<span class="medal">🥈</span>';
+    else if (rank === 3) medal = '<span class="medal">🥉</span>';
+
+    html += `<div class="${cls}">
+        ${medal}
+        <div class="name-row">
+          <span class="student-id">${s.id}</span>
+          <span class="student-name">${s.name}</span>
+        </div>
+        <div class="total-score">${s.total}</div>
+        <div class="sub-scores">
+          <span>客观 ${s.objective}</span>
+          <span>主观 ${s.subjective}</span>
+        </div>
+      </div>`;
+  });
+  html += '</div>';
+
+  html += `<h3 style="font-size:1.2rem; margin: 20px 0 12px; color:#0b2a4a;">📝 题目分布</h3>`;
+  html += '<div class="two-col">';
+
+  html += '<div class="col-objective">';
+  html += '<h4>客观题</h4>';
+  if (objective.length === 0) {
+    html += '<div class="empty-hint" style="padding:16px;">无客观题数据</div>';
+  } else {
+    html += `<div class="table-wrapper"><table class="table-obj">
+        <thead><tr>
+          <th>题号</th><th>答案</th><th>错</th><th>对</th><th>正答率</th>
+        </tr></thead><tbody>`;
+    objective.forEach(o => {
+      let rateText = (o.correctRate > 0 && o.correctRate <= 1)
+        ? (o.correctRate * 100).toFixed(1) + '%'
+        : o.correctRate.toFixed(1) + '%';
+      html += `<tr>
+          <td><strong>${o.qNoText}</strong></td>
+          <td><strong>${o.answer}</strong></td>
+          <td>${o.wrongCount}</td>
+          <td>${o.correctCount}</td>
+          <td>${rateText}</td>
+        </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  html += '</div>';
+
+  html += '<div class="col-subjective">';
+  html += '<h4>主观题</h4>';
+  if (subjective.length === 0) {
+    html += '<div class="empty-hint" style="padding:16px;">无主观题数据</div>';
+  } else {
+    html += `<div class="table-wrapper"><table class="table-subj">
+        <thead><tr>
+          <th>题号</th><th>正确答案</th><th>答错人数</th><th>答对人数</th><th>正答率</th>
+        </tr></thead><tbody>`;
+    subjective.forEach(o => {
+      let rateText = (o.correctRate > 0 && o.correctRate <= 1)
+        ? (o.correctRate * 100).toFixed(1) + '%'
+        : o.correctRate.toFixed(1) + '%';
+      html += `<tr>
+          <td>${o.qNoText}</td>
+          <td><strong>${o.answer}</strong></td>
+          <td>${o.wrongCount}</td>
+          <td>${o.correctCount}</td>
+          <td>${rateText}</td>
+        </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  html += '</div>';
+
+  html += '</div>';
+
+  html += `<div class="stats-banner" style="margin-top: 24px;">
+      <span>📊 总得分平均分</span>
+      <span class="avg-score">${avgScore.toFixed(2)}</span>
+      <span style="color:#1e4f8a;">低于平均分 ${belowAvgStudents.length} 人</span>
+    </div>`;
+  if (belowAvgStudents.length > 0) {
+    html += '<div class="below-avg-list">';
+    belowAvgStudents.forEach(s => {
+      html += `<span class="below-avg-item">${s.name} (${s.id}) · ${s.total}分</span>`;
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="color:#2e7d32; padding:8px;">🎉 所有同学均达到或超过平均分！</div>';
+  }
+
+  displayContent.innerHTML = html;
+}
+
+/* ==================== 汇总排名页 ==================== */
+function renderRanking() {
+  if (importedRecords.length === 0) {
+    rankingContent.innerHTML = '<div class="empty-hint">暂无导入数据，请先导入至少一份成绩单。</div>';
+    return;
+  }
+
+  const subjects = ['语文','数学','英语','物理','化学','生物'];
+
+  const studentMap = new Map();
+  importedRecords.forEach(rec => {
+    const subject = rec.subject;
+    const students = rec.students;
+    const scores = students.map(s => s.total);
+    const avg = scores.length ? scores.reduce((a,b) => a+b, 0) / scores.length : 0;
+
+    students.forEach(s => {
+      let entry = studentMap.get(s.id);
+      if (!entry) {
+        entry = {
+          id: s.id,
+          name: s.name,
+          totalSum: 0,
+          subjectSums: { 语文:0, 数学:0, 英语:0, 物理:0, 化学:0, 生物:0 },
+          belowAvgCount: 0,
+          subjectBelowAvg: { 语文:0, 数学:0, 英语:0, 物理:0, 化学:0, 生物:0 }
+        };
+        studentMap.set(s.id, entry);
+      }
+      entry.totalSum += s.total;
+      if (entry.subjectSums.hasOwnProperty(subject)) entry.subjectSums[subject] += s.total;
+      if (s.total < avg) {
+        entry.belowAvgCount += 1;
+        if (entry.subjectBelowAvg.hasOwnProperty(subject)) entry.subjectBelowAvg[subject] += 1;
+      }
+    });
+  });
+
+  const studentsArray = Array.from(studentMap.values());
+  const byTotal = [...studentsArray].sort((a,b) => b.totalSum - a.totalSum);
+
+  let topHtml = '';
+  const top3 = byTotal.slice(0, 3);
+  if (top3.length > 0) {
+    topHtml += `<h3 style="font-size:1.2rem; color:#0b2a4a; margin-bottom: 6px;">🏆 冠亚季军领奖台</h3>`;
+    topHtml += '<div class="podium">';
+    const podiumOrder = [top3[1], top3[0], top3[2]];
+    const podiumCls = ['podium-2', 'podium-1', 'podium-3'];
+    const podiumTitle = ['🥈 榜眼 · 最强王者', '🥇 状元 · 最强王者', '🥉 探花 · 最强王者'];
+    const podiumEmoji = ['🥈','🥇','🥉'];
+    podiumOrder.forEach((s, i) => {
+      if (!s) return;
+      topHtml += `<div class="podium-item ${podiumCls[i]}">
+        <div class="crown">${podiumEmoji[i]}</div>
+        <div class="p-title">${podiumTitle[i]}</div>
+        <div class="p-name">${s.name}</div>
+        <div class="p-id">${s.id}</div>
+        <div class="p-score">${s.totalSum}</div>
+      </div>`;
+    });
+    topHtml += '</div>';
+  }
+
+  function tierBlock(title, cls, arr) {
+    if (arr.length === 0) return '';
+    let h = `<div class="tier-section">
+      <div class="tier-title ${cls}">${title}</div>
+      <div class="tier-grid">`;
+    arr.forEach(s => {
+      h += `<div class="tier-card">
+        <span class="t-name">${s.name}</span>
+        <span class="t-id"> · ${s.id}</span>
+        <span class="t-score"> · ${s.totalSum}</span>
+      </div>`;
+    });
+    h += '</div></div>';
+    return h;
+  }
+
+  const tier2 = byTotal.slice(3, 8);
+  const tier3 = byTotal.slice(8, 15);
+  const tier4 = byTotal.slice(15, 22);
+  const tier5 = byTotal.slice(22, 27);
+  const tier6 = byTotal.slice(27, 30);
+
+  topHtml += tierBlock('💎 永恒钻石（第4-8名）', 'tier-diamond', tier2);
+  topHtml += tierBlock('🏆 尊贵铂金（第9-15名）', 'tier-platinum', tier3);
+  topHtml += tierBlock('🥇 荣耀黄金（第16-22名）', 'tier-gold', tier4);
+  topHtml += tierBlock('🥈 秩序白银（第23-27名）', 'tier-silver', tier5);
+  topHtml += tierBlock('🥉 倔强青铜（第28-30名）', 'tier-bronze', tier6);
+
+  const sortKey = rankingSortKey;
+  const asc = rankingSortAsc;
+  const studentsSorted = [...studentsArray];
+  studentsSorted.sort((a, b) => {
+    let va, vb;
+    if (sortKey === 'totalSum') { va = a.totalSum; vb = b.totalSum; }
+    else if (sortKey === 'belowAvgCount') { va = a.belowAvgCount; vb = b.belowAvgCount; }
+    else { va = a.subjectSums[sortKey] || 0; vb = b.subjectSums[sortKey] || 0; }
+    return asc ? va - vb : vb - va;
+  });
+
+  let tblHtml = `<h3 style="font-size:1.2rem; color:#0b2a4a; margin: 30px 0 12px;">📊 汇总排名表</h3>`;
+  tblHtml += `<div class="table-wrapper"><table>
+    <thead><tr>
+      <th>排名</th><th>学号</th><th>姓名</th>
+      <th class="sortable" data-key="totalSum">总分 ${sortKey === 'totalSum' ? (asc ? '↑' : '↓') : ''}</th>`;
+  subjects.forEach(sub => {
+    tblHtml += `<th class="sortable" data-key="${sub}">${sub} ${sortKey === sub ? (asc ? '↑' : '↓') : ''}</th>`;
+  });
+  tblHtml += `<th class="sortable" data-key="belowAvgCount">低于平均总次数 ${sortKey === 'belowAvgCount' ? (asc ? '↑' : '↓') : ''}</th>`;
+  subjects.forEach(sub => {
+    tblHtml += `<th>${sub}低于</th>`;
+  });
+  tblHtml += `</tr></thead><tbody>`;
+
+  studentsSorted.forEach((s, i) => {
+    tblHtml += `<tr>
+      <td><span class="rank-badge">${i + 1}</span></td>
+      <td>${s.id}</td>
+      <td><strong>${s.name}</strong></td>
+      <td><strong>${s.totalSum}</strong></td>`;
+    subjects.forEach(sub => {
+      tblHtml += `<td>${s.subjectSums[sub] || 0}</td>`;
+    });
+    tblHtml += `<td>${s.belowAvgCount}</td>`;
+    subjects.forEach(sub => {
+      tblHtml += `<td>${s.subjectBelowAvg[sub] || 0}</td>`;
+    });
+    tblHtml += `</tr>`;
+  });
+  tblHtml += `</tbody></table></div>`;
+  tblHtml += `<p style="margin-top: 16px; color: #4e6b8a; font-size: 0.9rem;">💡 点击「总分」、任意学科列标题，或「低于平均总次数」列标题，可重新排序；低于平均分次数按每次考试该科平均分判定。</p>`;
+
+  rankingContent.innerHTML = topHtml + tblHtml;
+
+  rankingContent.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (rankingSortKey === key) rankingSortAsc = !rankingSortAsc;
+      else { rankingSortKey = key; rankingSortAsc = false; }
+      renderRanking();
+    });
+  });
+}
+
+/* ==================== 初始化 ==================== */
+loadAllRecordsFromSupabase();
+excelFileInput.addEventListener('change', () => {
+  if (excelFileInput.files.length > 0) {
+    importMessage.textContent = `已选择：${excelFileInput.files[0].name}`;
+  }
+});
+</script>
+</body>
+</html>
